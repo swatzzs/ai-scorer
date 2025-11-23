@@ -1,0 +1,7 @@
+Flask==3.0.0
+sentence-transformers==3.0.1
+vaderSentiment==3.3.2
+language-tool-python==2.7.1
+torch      # or torch==2.x depending on your environment
+transformers
+numpy
