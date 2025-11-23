@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Nirmaan AI – Communication Scorer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f7fafc;
+        }
+        .container {
+            max-width: 960px;
+            margin: 30px auto;
+            background: #ffffff;
+            padding: 24px 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+        }
+        h1 {
+            margin-top: 0;
+        }
+        textarea {
+            width: 100%;
+            min-height: 180px;
+            font-size: 14px;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e0;
+            resize: vertical;
+        }
+        .field-row {
+            margin-top: 12px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        input[type="number"] {
+            padding: 6px 8px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e0;
+            width: 120px;
+        }
+        button {
+            margin-top: 16px;
+            padding: 10px 20px;
+            border-radius: 999px;
+            border: none;
+            background: #2563eb;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 24px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 16px;
+        }
+        .overall-box {
+            padding: 12px 14px;
+            border-radius: 10px;
+            background: #ebf8ff;
+            border: 1px solid #90cdf4;
+            margin-bottom: 16px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background: #f1f5f9;
+        }
+        .small {
+            font-size: 12px;
+            color: #4a5568;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            background: #edf2f7;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Nirmaan AI – Spoken Communication Scorer</h1>
+    <p class="small">
+        Paste a transcript of a self-introduction and click <strong>Score</strong>.
+        The tool will compute a rubric-based overall score (0–100) plus per-criterion feedback.
+    </p>
+
+    <label for="transcript"><strong>Transcript</strong></label>
+    <textarea id="transcript" placeholder="Paste the transcribed self-introduction here..."></textarea>
+
+    <div class="field-row">
+        <label for="duration" class="small">
+            Approx. audio duration (seconds)&nbsp;(optional, default ≈ 60s):
+        </label>
+        <input id="duration" type="number" min="1" step="1" placeholder="60">
+    </div>
+
+    <button id="scoreBtn">Score</button>
+    <span id="status" class="small"></span>
+
+    <div id="result" class="result" style="display:none;">
+        <div class="overall-box">
+            <strong>Overall Score:</strong>
+            <span id="overallScore"></span> / 100
+            &nbsp;&nbsp; | &nbsp;&nbsp;
+            <span class="small">Words: <span id="wordCount"></span></span>
+        </div>
+
+        <table>
+            <thead>
+            <tr>
+                <th>Criterion</th>
+                <th>Group</th>
+                <th>Rule Score</th>
+                <th>Final Score</th>
+                <th>Semantic Similarity</th>
+                <th>Feedback</th>
+            </tr>
+            </thead>
+            <tbody id="criteriaRows">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const scoreBtn = document.getElementById("scoreBtn");
+    const statusEl = document.getElementById("status");
+    const resultEl = document.getElementById("result");
+    const overallScoreEl = document.getElementById("overallScore");
+    const wordCountEl = document.getElementById("wordCount");
+    const criteriaRowsEl = document.getElementById("criteriaRows");
+
+    scoreBtn.addEventListener("click", async () => {
+        const transcript = document.getElementById("transcript").value.trim();
+        const durationVal = document.getElementById("duration").value;
+
+        if (!transcript) {
+            alert("Please paste a transcript first.");
+            return;
+        }
+
+        scoreBtn.disabled = true;
+        statusEl.textContent = "Scoring...";
+        resultEl.style.display = "none";
+
+        let payload = { transcript: transcript };
+        if (durationVal) {
+            payload.duration_seconds = parseFloat(durationVal);
+        }
+
+        try {
+            const resp = await fetch("/api/score", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json();
+
+            overallScoreEl.textContent = data.overall_score;
+            wordCountEl.textContent = data.words;
+
+            criteriaRowsEl.innerHTML = "";
+            data.criteria.forEach(c => {
+                const tr = document.createElement("tr");
+
+                const ruleScore = `${c.rule_score} / ${c.rule_max_score}`;
+                const finalScore = `${c.final_score}`;
+
+                tr.innerHTML = `
+                    <td><strong>${c.name}</strong></td>
+                    <td><span class="badge">${c.group}</span></td>
+                    <td>${ruleScore}</td>
+                    <td>${finalScore}</td>
+                    <td>${c.semantic_similarity}</td>
+                    <td class="small">${c.feedback}</td>
+                `;
+                criteriaRowsEl.appendChild(tr);
+            });
+
+            resultEl.style.display = "block";
+            statusEl.textContent = "Scoring complete.";
+        } catch (err) {
+            console.error(err);
+            alert("Error while scoring. See console for details.");
+            statusEl.textContent = "Error.";
+        } finally {
+            scoreBtn.disabled = false;
+        }
+    });
+</script>
+</body>
+</html>
